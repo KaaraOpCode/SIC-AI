@@ -65,11 +65,5 @@ python -m ipykernel install --user --name=sic-ai-2025
 
 > 📝 **Note:** This repository is part of my personal learning journey and portfolio development under the Samsung Innovation Campus AI Certificate 2025.
 
----
 
-If you want me to help create or update any project-specific READMEs or documentation, just ask!
-
-```
-
-Would you like me to commit this for you or generate a formatted PDF summary as well?
 ```
