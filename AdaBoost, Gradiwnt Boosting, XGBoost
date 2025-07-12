@@ -1,0 +1,72 @@
+AdaBoost (Adaptive Boosting) – scikit-learn
+
+Classifier/Regressor Hyperparameters
+
+| Hyperparameter      | Explanation                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| base\_estimator | The weak learner to build the ensemble. <br> **Default**: `DecisionTreeClassifier(max_depth=1)` for classifier, similar default for regressor. |
+| n\_estimators   | The maximum number of weak learners (estimators) used before termination.                                                                      |
+| learning\_rate  | Shrinks the contribution of each weak learner. Lower values require more estimators for better performance.                                    |
+| algorithm       | Options: <br> - `'SAMME'`: Multiclass AdaBoost algorithm. <br> - `'SAMME.R'`: Uses class probabilities (real boosting).                        |
+
+🔗 Docs:
+
+[AdaBoostClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostClassifier.html)
+[AdaBoostRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostRegressor.html)
+
+---
+
+Gradient Boosting Machine (GBM) – scikit-learn
+
+Classifier/Regressor Hyperparameters
+
+| Hyperparameter     | Explanation                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| **loss**           | The loss function to optimize. E.g. 'deviance' for classification, 'squared\_error' for regression. |
+| **n\_estimators**  | Number of boosting stages to perform (number of weak learners).                                     |
+| **learning\_rate** | Contribution of each weak learner to minimize the loss function.                                    |
+| **subsample**      | Fraction of samples used for fitting each base learner. Controls overfitting (similar to bagging).  |
+
+🔧 Tip
+All need tuning for optimal performance to balance bias-variance trade-off.
+
+🔗 Docs:
+
+[GradientBoostingClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingClassifier.html)
+ [GradientBoostingRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingRegressor.html)
+
+---
+
+📝 Extreme Gradient Boosting (XGBoost)
+
+✅ Key Points:
+
+* An efficient and scalable implementation of gradient boosting.
+* Improves GBM by:
+
+  * Faster execution (optimized for performance).
+  * Regularization options to reduce overfitting.
+* Supports both classification and regression.
+* Frequently used by Kaggle competition winners.
+
+⚠️ Note:
+
+* Not part of scikit-learn by default. Requires separate installation via:
+
+```bash
+pip install xgboost
+```
+
+🔗 Docs: [XGBoost Documentation](https://xgboost.readthedocs.io/en/stable/)
+
+---
+
+✅ Summary of Boosting Algorithms
+
+| Algorithm    | Key Strength                                                                              |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| AdaBoost | Simple, works well for binary/multiclass classification with shallow trees.               |
+| GBM    | Allows different loss functions and subsampling; requires careful tuning.                 |
+| XGBoost  | Fast, regularized GBM with additional system optimization (parallelism, cache awareness). |
+
+---
