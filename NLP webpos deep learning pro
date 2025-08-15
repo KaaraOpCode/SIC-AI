@@ -1,0 +1,207 @@
+# Install packages if not installed
+# pip install nltk tensorflow wordcloud fpdf matplotlib scikit-learn
+
+import nltk
+from nltk.tokenize import word_tokenize
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout
+from sklearn.model_selection import train_test_split
+from wordcloud import WordCloud
+from fpdf import FPDF
+import matplotlib.pyplot as plt
+from collections import Counter, defaultdict
+from datetime import datetime
+import numpy as np
+import os
+
+nltk.download('punkt')
+
+# ---------------- CONFIG ----------------
+PRODUCTS = ["CocaCola", "Fanta", "Sprite", "Pepsi"]
+LOW_STOCK_THRESHOLD = 5
+TMP_DIR = "tmp_images"
+PDF_FILE = f"WebPOS_Report_{datetime.now().strftime('%Y%m%d')}.pdf"
+os.makedirs(TMP_DIR, exist_ok=True)
+
+# ---------------- FETCH LOGS ----------------
+def fetch_logs():
+    return [
+        "Sold 3 bottles of CocaCola on 15/08/2025",
+        "Customer complained: Product was expired",
+        "Sold 10 Pepsi bottles",
+        "Customer said the service was excellent!",
+        "Sold 5 Fanta bottles",
+        "Stock of Sprite is 2 units",
+        "Sold 2 CocaCola bottles",
+        "Customer complained: Late delivery of Pepsi",
+        "New shipment: 50 units of Sprite arrived"
+    ]
+
+# ---------------- TOKENIZATION ----------------
+def tokenize_logs(logs):
+    return [word_tokenize(log) for log in logs]
+
+# ---------------- RULE-BASED NLP ----------------
+def extract_rule_based(tokenized_logs):
+    product_sales = defaultdict(int)
+    low_stock_alerts = []
+    feedback_texts = []
+
+    for tokens in tokenized_logs:
+        log_lower = [t.lower() for t in tokens]
+        products_in_log = [p for p in PRODUCTS if p.lower() in log_lower]
+        numbers = [int(t) for t in tokens if t.isdigit()]
+
+        for product in products_in_log:
+            if "sold" in log_lower and numbers:
+                product_sales[product] += numbers[0]
+
+        if "stock" in log_lower and any(n < LOW_STOCK_THRESHOLD for n in numbers):
+            low_stock_alerts.append(" ".join(tokens))
+
+        if any(word in log_lower for word in ["complained", "excellent", "late", "expired"]):
+            feedback_texts.append(" ".join(tokens))
+
+    return product_sales, low_stock_alerts, feedback_texts
+
+# ---------------- STATISTICS-BASED NLP ----------------
+def extract_statistics(tokenized_logs):
+    all_tokens = [t.lower() for tokens in tokenized_logs for t in tokens if t.isalpha()]
+    return Counter(all_tokens)
+
+# ---------------- LSTM SENTIMENT ----------------
+def train_lstm(feedback_texts, labels):
+    tokenized_texts = [" ".join(word_tokenize(f.lower())) for f in feedback_texts]
+
+    tokenizer = Tokenizer(oov_token="<OOV>")
+    tokenizer.fit_on_texts(tokenized_texts)
+    sequences = tokenizer.texts_to_sequences(tokenized_texts)
+    maxlen = 15
+    padded_sequences = pad_sequences(sequences, padding='post', maxlen=maxlen)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        padded_sequences, np.array(labels), test_size=0.2, random_state=42
+    )
+
+    vocab_size = len(tokenizer.word_index) + 1
+
+    model = Sequential([
+        Embedding(input_dim=vocab_size, output_dim=16, input_length=maxlen),
+        LSTM(32),
+        Dropout(0.2),
+        Dense(16, activation='relu'),
+        Dense(1, activation='sigmoid')
+    ])
+
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.fit(X_train, y_train, epochs=20, batch_size=2, validation_data=(X_test, y_test))
+    return model, tokenizer, maxlen
+
+def predict_sentiment(model, tokenizer, maxlen, feedback_texts):
+    tokenized_texts = [" ".join(word_tokenize(f.lower())) for f in feedback_texts]
+    sequences = tokenizer.texts_to_sequences(tokenized_texts)
+    padded_sequences = pad_sequences(sequences, padding='post', maxlen=maxlen)
+    preds = model.predict(padded_sequences)
+    results = []
+    for feedback, pred in zip(feedback_texts, preds):
+        sentiment = "Positive" if pred >= 0.5 else "Negative"
+        results.append({"feedback": feedback, "sentiment": sentiment, "score": round(pred[0],2)})
+    return results
+
+# ---------------- VISUALS ----------------
+def generate_wordcloud(feedback_texts):
+    text = " ".join(feedback_texts) if feedback_texts else "No feedback"
+    wc = WordCloud(width=800, height=400, background_color='white').generate(text)
+    path = os.path.join(TMP_DIR, "wordcloud.png")
+    wc.to_file(path)
+    return path
+
+def generate_sales_chart(product_sales):
+    plt.figure(figsize=(6,4))
+    plt.bar(product_sales.keys(), product_sales.values(), color='skyblue')
+    plt.title("Product Sales Count")
+    plt.ylabel("Units Sold")
+    plt.xlabel("Products")
+    path = os.path.join(TMP_DIR, "sales_chart.png")
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close()
+    return path
+
+# ---------------- PDF ----------------
+def generate_pdf(product_sales, low_stock_alerts, feedback_sentiment, word_freq, wc_path, bar_chart_path):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 20)
+    pdf.multi_cell(0,10,"WebPOS Automated Report")
+    pdf.set_font("Arial", '', 14)
+    pdf.multi_cell(0,8,f"Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n")
+
+    # Product Sales
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.multi_cell(0,10,"1. Product Sales Summary")
+    pdf.set_font("Arial", '', 12)
+    for product, qty in product_sales.items():
+        pdf.multi_cell(0,8,f"{product}: {qty} units sold")
+    pdf.ln(5)
+    pdf.image(bar_chart_path, x=30, w=150)
+
+    # Low Stock Alerts
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.multi_cell(0,10,"2. Low Stock Alerts")
+    pdf.set_font("Arial", '', 12)
+    if low_stock_alerts:
+        for alert in low_stock_alerts:
+            pdf.multi_cell(0,8,alert)
+    else:
+        pdf.multi_cell(0,8,"No low stock alerts detected.")
+
+    # Customer Feedback Sentiment
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.multi_cell(0,10,"3. Customer Feedback & Sentiment")
+    pdf.set_font("Arial", '', 12)
+    if feedback_sentiment:
+        for res in feedback_sentiment:
+            pdf.multi_cell(0,8,f"{res['feedback']} => Sentiment: {res['sentiment']} (score: {res['score']})")
+    else:
+        pdf.multi_cell(0,8,"No feedback detected.")
+    pdf.ln(5)
+    pdf.image(wc_path, x=20, w=170)
+
+    # Word Frequency
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.multi_cell(0,10,"4. Most Common Words in Logs")
+    pdf.set_font("Arial", '', 12)
+    for word, freq in word_freq.most_common(10):
+        pdf.multi_cell(0,8,f"{word}: {freq}")
+
+    pdf.output(PDF_FILE)
+    print(f"✅ PDF report generated: {PDF_FILE}")
+
+# ---------------- MAIN ----------------
+def main():
+    logs = fetch_logs()
+    tokenized_logs = tokenize_logs(logs)
+
+    product_sales, low_stock_alerts, feedback_texts = extract_rule_based(tokenized_logs)
+    word_freq = extract_statistics(tokenized_logs)
+
+    # Example training labels for demo (1=Positive, 0=Negative)
+    labels = [1 if "excellent" in f or "happy" in f else 0 for f in feedback_texts]
+    model, tokenizer_lstm, maxlen = train_lstm(feedback_texts, labels)
+    feedback_sentiment = predict_sentiment(model, tokenizer_lstm, maxlen, feedback_texts)
+
+    wc_path = generate_wordcloud(feedback_texts)
+    bar_chart_path = generate_sales_chart(product_sales)
+    generate_pdf(product_sales, low_stock_alerts, feedback_sentiment, word_freq, wc_path, bar_chart_path)
+
+if __name__ == "__main__":
+    main()
