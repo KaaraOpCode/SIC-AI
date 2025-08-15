@@ -1,0 +1,36 @@
+import requests as rq
+from bs4 import BeautifulSoup
+import re
+
+# Step 1: Get the page
+url = "https://en.wikipedia.org/wiki/Machine_learning"
+res = rq.get(url)
+
+# Step 2: Parse HTML
+soup = BeautifulSoup(res.text, 'html.parser')
+
+# Step 3: Find the main article content
+content = soup.find('div', {'class': 'mw-parser-output'})
+
+# Step 4: Extract paragraphs
+paragraphs = content.find_all('p')
+
+# Step 5: Clean text (remove [1], [2], etc. and extra spaces)
+clean_paragraphs = []
+for p in paragraphs:
+    text = p.get_text()
+    text = re.sub(r'\[\d+\]', '', text)  # Remove citation numbers
+    text = re.sub(r'\s+', ' ', text).strip()  # Remove extra whitespace
+    if text:  # Skip empty lines
+        clean_paragraphs.append(text)
+
+# Step 6: Join into a single string
+article_text = "\n\n".join(clean_paragraphs)
+
+# Step 7: Save to a file
+with open("machine_learning_wikipedia.txt", "w", encoding="utf-8") as f:
+    f.write(article_text)
+
+print("Article saved to machine_learning_wikipedia.txt")
+print("\nPreview:\n")
+print(article_text[:800])  # Preview first 800 characters
