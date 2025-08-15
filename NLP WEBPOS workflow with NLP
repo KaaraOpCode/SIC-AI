@@ -1,0 +1,101 @@
+WebPOS Autonomous Workflow Diagram
+
+1️⃣ Inputs
+
+Sales Logs: Track items sold, quantities.
+
+Inventory Data: Current stock levels.
+
+Customer Feedback: Complaints, suggestions, ratings.
+
+Transaction Logs: Returns, suspicious activities.
+
+
+
+---
+
+2️⃣ Processing Layer
+
+Preprocessing: Tokenization, lemmatization, cleaning text.
+
+NLP Layer:
+
+Sentiment Analysis (pretrained LM)
+
+Keyword extraction for issues (expired, late, low stock)
+
+
+Rule Engine:
+
+Low stock → alert/order
+
+Expired → remove from inventory
+
+Suspicious → alert admin
+
+Negative feedback → escalate
+
+
+
+
+---
+
+3️⃣ Decision Engine
+
+Determines automated actions:
+
+update_dashboard → sales metrics
+
+add → restock order
+
+remove → expired/suspicious items
+
+fix → suggest fixes for complaints
+
+alert → notify manager/admin
+
+escalate → escalate negative feedback
+
+generate_report → PDF summarizing system state
+
+
+
+
+---
+
+4️⃣ Execution Layer
+
+Action Execution:
+
+Inventory updates
+
+Alerts/emails
+
+Logging to CSV/database
+
+
+Reporting:
+
+PDF generation with:
+
+Inventory summary
+
+Actions executed
+
+Feedback sentiment + WordCloud
+
+
+
+
+
+---
+
+5️⃣ Output
+
+Updated POS dashboard
+
+Manager/Admin notifications
+
+PDF & CSV logs
+
+Automated restocking or issue resolution
