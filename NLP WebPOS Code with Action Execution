@@ -1,0 +1,221 @@
+# Install if needed:
+# pip install nltk transformers fpdf wordcloud matplotlib pandas
+
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import wordnet
+from transformers import pipeline
+from fpdf import FPDF
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+import pandas as pd
+from datetime import datetime
+import os
+import smtplib
+from email.mime.text import MIMEText
+
+# ---------------- NLTK Downloads ----------------
+nltk.download('punkt')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
+
+# ---------------- CONFIG ----------------
+PRODUCTS = ["CocaCola", "Fanta", "Sprite", "Pepsi"]
+LOW_STOCK_THRESHOLD = 5
+TMP_DIR = "tmp_images"
+PDF_FILE = f"WebPOS_Automation_Report_{datetime.now().strftime('%Y%m%d')}.pdf"
+LOG_FILE = f"WebPOS_Automation_Logs_{datetime.now().strftime('%Y%m%d')}.csv"
+EMAIL_MANAGER = "manager@example.com"  # Replace with real manager email
+EMAIL_SENDER = "webpos.system@example.com"  # Replace with sender email
+EMAIL_PASSWORD = "yourpassword"  # Replace with sender password
+os.makedirs(TMP_DIR, exist_ok=True)
+
+lemmatizer = WordNetLemmatizer()
+sentiment_model = pipeline("sentiment-analysis")
+
+# ---------------- HELPER FUNCTIONS ----------------
+def get_wordnet_pos(treebank_tag):
+    if treebank_tag.startswith('J'):
+        return wordnet.ADJ
+    elif treebank_tag.startswith('V'):
+        return wordnet.VERB
+    elif treebank_tag.startswith('N'):
+        return wordnet.NOUN
+    elif treebank_tag.startswith('R'):
+        return wordnet.ADV
+    else:
+        return wordnet.NOUN
+
+def preprocess_text(text):
+    tokens = word_tokenize(text.lower())
+    return [lemmatizer.lemmatize(token, get_wordnet_pos('n')) for token in tokens]
+
+# ---------------- SAMPLE LOGS ----------------
+def fetch_logs():
+    return [
+        "Sold 3 bottles of CocaCola",
+        "Customer complained: Product was expired",
+        "Sold 10 Pepsi bottles",
+        "Customer said the service was excellent!",
+        "Sold 5 Fanta bottles",
+        "Stock of Sprite is 2 units",
+        "Sold 2 CocaCola bottles",
+        "Customer complained: Late delivery of Pepsi",
+        "New shipment: 50 units of Sprite arrived",
+        "Suspicious return: 10 CocaCola bottles"
+    ]
+
+# ---------------- AUTOMATED ACTIONS ----------------
+def decide_actions(logs):
+    actions = []
+    inventory = defaultdict(int)
+    feedback_texts = []
+
+    for log in logs:
+        tokens = preprocess_text(log)
+        log_lower = [t.lower() for t in tokens]
+
+        # Track sales
+        for product in PRODUCTS:
+            if product.lower() in log_lower and "sold" in log_lower:
+                qty = next((int(t) for t in log_lower if t.isdigit()), 0)
+                inventory[product] += qty
+                actions.append({"action": "update_dashboard", "product": product, "qty": qty, "details": log})
+
+        # Low stock alert
+        if "stock" in log_lower:
+            qty = next((int(t) for t in log_lower if t.isdigit()), None)
+            product = next((p for p in PRODUCTS if p.lower() in log_lower), None)
+            if qty is not None and product:
+                if qty < LOW_STOCK_THRESHOLD:
+                    actions.append({"action": "alert_manager", "product": product, "qty": qty, "details": log})
+                    actions.append({"action": "order_new_stock", "product": product, "qty": LOW_STOCK_THRESHOLD*5, "details": log})
+
+        # Expired products
+        if "expired" in log_lower:
+            product = next((p for p in PRODUCTS if p.lower() in log_lower), None)
+            actions.append({"action": "remove_from_inventory", "product": product, "details": log})
+
+        # Suspicious activity
+        if "suspicious" in log_lower:
+            actions.append({"action": "alert_admin", "details": log})
+            actions.append({"action": "review_transaction", "details": log})
+
+        # Customer feedback
+        if any(word in log_lower for word in ["complain", "excellent", "late", "happy", "disappoint"]):
+            feedback_texts.append(log)
+
+    return actions, inventory, feedback_texts
+
+# ---------------- SENTIMENT ANALYSIS ----------------
+def analyze_feedback(feedback_texts):
+    if not feedback_texts:
+        return []
+    results = sentiment_model(feedback_texts)
+    feedback_sentiment = []
+    for fb, res in zip(feedback_texts, results):
+        feedback_sentiment.append({
+            "feedback": fb,
+            "sentiment": res['label'],
+            "score": round(res['score'], 2)
+        })
+    return feedback_sentiment
+
+# ---------------- EXECUTION FUNCTIONS ----------------
+def execute_actions(actions):
+    executed_log = []
+    for act in actions:
+        executed_log.append({
+            "timestamp": datetime.now(),
+            "action": act.get("action"),
+            "product": act.get("product", ""),
+            "qty": act.get("qty", ""),
+            "details": act.get("details", "")
+        })
+        # Email alert simulation
+        if act["action"] in ["alert_manager", "alert_admin"]:
+            send_email_alert(act)
+    # Save to CSV
+    df = pd.DataFrame(executed_log)
+    df.to_csv(LOG_FILE, index=False)
+    print(f"✅ Actions executed and logged to {LOG_FILE}")
+    return executed_log
+
+# ---------------- EMAIL ALERT ----------------
+def send_email_alert(action):
+    subject = f"WebPOS Alert: {action['action']}"
+    body = f"Action: {action['action']}\nProduct: {action.get('product','')}\nQuantity: {action.get('qty','')}\nDetails: {action.get('details','')}"
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = EMAIL_SENDER
+    msg['To'] = EMAIL_MANAGER
+    # For simulation, we print instead of sending
+    print(f"📧 Email Alert Sent:\n{body}\n")
+    # Uncomment below for real email sending (requires valid credentials)
+    # with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+    #     server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+    #     server.sendmail(EMAIL_SENDER, EMAIL_MANAGER, msg.as_string())
+
+# ---------------- WORDCLOUD ----------------
+def generate_wordcloud(feedback_texts):
+    text = " ".join(feedback_texts) if feedback_texts else "No feedback"
+    wc = WordCloud(width=800, height=400, background_color='white').generate(text)
+    path = os.path.join(TMP_DIR, "wordcloud.png")
+    wc.to_file(path)
+    return path
+
+# ---------------- PDF REPORT ----------------
+def generate_pdf(actions, inventory, feedback_sentiment, wordcloud_path):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 20)
+    pdf.multi_cell(0,10,"WebPOS Autonomous Action Report")
+    pdf.set_font("Arial", '', 14)
+    pdf.multi_cell(0,8,f"Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n")
+
+    # Inventory Summary
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.multi_cell(0,10,"1. Inventory Summary")
+    pdf.set_font("Arial", '', 12)
+    for product, qty in inventory.items():
+        pdf.multi_cell(0,8,f"{product}: {qty} units sold")
+
+    # Automated Actions
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.multi_cell(0,10,"2. Automated Actions")
+    pdf.set_font("Arial", '', 12)
+    for act in actions:
+        pdf.multi_cell(0,8,f"{act['timestamp']} => {act['action']} | Product: {act.get('product','')} | Qty: {act.get('qty','')} | Details: {act.get('details','')}")
+
+    # Customer Feedback Sentiment
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.multi_cell(0,10,"3. Customer Feedback & Sentiment")
+    pdf.set_font("Arial", '', 12)
+    if feedback_sentiment:
+        for res in feedback_sentiment:
+            pdf.multi_cell(0,8,f"{res['feedback']} => Sentiment: {res['sentiment']} (score: {res['score']})")
+    else:
+        pdf.multi_cell(0,8,"No feedback detected.")
+    pdf.ln(5)
+    pdf.image(wordcloud_path, x=20, w=170)
+
+    pdf.output(PDF_FILE)
+    print(f"✅ PDF report generated: {PDF_FILE}")
+
+# ---------------- MAIN ----------------
+def main():
+    logs = fetch_logs()
+    actions, inventory, feedback_texts = decide_actions(logs)
+    feedback_sentiment = analyze_feedback(feedback_texts)
+    executed_actions = execute_actions(actions)
+    wc_path = generate_wordcloud(feedback_texts)
+    generate_pdf(executed_actions, inventory, feedback_sentiment, wc_path)
+
+if __name__ == "__main__":
+    main()
